@@ -11,6 +11,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Database } from "@/integrations/supabase/types";
 
+const DEFAULT_NAMES = [
+  "VENEDICK PRIEL BRAGAS",
+  "JOHN REY ROXAS DABARAS",
+  "JAN MART BALANGUE MACADAEG",
+  "VON IVAN VERDADERO PUNZALAN"
+];
+
 type PaymentShare = Database['public']['Tables']['payment_shares']['Row'];
 type PaymentShareInsert = Database['public']['Tables']['payment_shares']['Insert'];
 
@@ -57,7 +64,30 @@ const CostSplitter = ({ summary, batchId }: CostSplitterProps) => {
         
         setPeople(loadedPeople);
       } else {
-        setPeople([]);
+        // If no payment shares exist, create them with default names
+        const amountPerPerson = calculateAmountPerPerson(DEFAULT_NAMES.length);
+        const defaultPeople = DEFAULT_NAMES.map(name => ({
+          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          name,
+          amountToPay: amountPerPerson,
+          isPaid: false
+        }));
+
+        // Save default people to database
+        const sharesToInsert = defaultPeople.map(person => ({
+          document_batch_id: batchId,
+          person_name: person.name,
+          amount_to_pay: person.amountToPay,
+          is_paid: person.isPaid
+        }));
+
+        const { error: insertError } = await supabase
+          .from('payment_shares')
+          .insert(sharesToInsert);
+
+        if (insertError) throw insertError;
+
+        setPeople(defaultPeople);
       }
     } catch (error) {
       console.error("Error loading payment shares:", error);

@@ -12,6 +12,14 @@ import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "react-router-dom";
+import { ManualPageInput } from '@/components/ManualPageInput';
+
+const DEFAULT_NAMES = [
+  "VENEDICK PRIEL BRAGAS",
+  "JOHN REY ROXAS DABARAS",
+  "JAN MART BALANGUE MACADAEG",
+  "VON IVAN VERDADERO PUNZALAN"
+];
 
 const getNewBatchId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15));
 
@@ -29,6 +37,7 @@ const Index = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const batchParam = searchParams.get('batch');
+  const [activeTab, setActiveTab] = useState<'upload' | 'manual'>('upload');
 
   useEffect(() => {
     if (batchParam && user) {
@@ -200,7 +209,8 @@ const Index = () => {
             total_pages: summary.totalPages,
             total_cost: summary.totalCost,
             price_per_page: pricePerPage,
-            payment_status: 'PENDING'
+            payment_status: 'PENDING',
+            created_at: new Date().toISOString()
           }
         ]);
       if (batchError) throw batchError;
@@ -217,28 +227,27 @@ const Index = () => {
       if (docsToInsert.length > 0) {
         const { error: docsError } = await supabase
           .from('documents')
-          .upsert(docsToInsert, { onConflict: ['id'] });
+          .upsert(docsToInsert, { 
+            onConflict: 'id',
+            defaultToNull: false
+          });
         if (docsError) throw docsError;
       }
 
-      // Copy payment_shares from old batchId to newBatchId
-      const { data: oldShares, error: sharesError } = await supabase
+      // Create payment shares for each person
+      const amountPerPerson = summary.totalCost / DEFAULT_NAMES.length;
+      const sharesToInsert = DEFAULT_NAMES.map(name => ({
+        document_batch_id: newBatchId,
+        person_name: name,
+        amount_to_pay: amountPerPerson,
+        is_paid: false,
+        created_at: new Date().toISOString()
+      }));
+
+      const { error: insertSharesError } = await supabase
         .from('payment_shares')
-        .select('*')
-        .eq('document_batch_id', batchId);
-      if (sharesError) throw sharesError;
-      if (oldShares && oldShares.length > 0) {
-        const newShares = oldShares.map(share => ({
-          document_batch_id: newBatchId,
-          person_name: share.person_name,
-          amount_to_pay: share.amount_to_pay,
-          is_paid: share.is_paid
-        }));
-        const { error: insertSharesError } = await supabase
-          .from('payment_shares')
-          .insert(newShares);
-        if (insertSharesError) throw insertSharesError;
-      }
+        .insert(sharesToInsert);
+      if (insertSharesError) throw insertSharesError;
 
       toast({
         title: "Calculation saved",
@@ -284,81 +293,182 @@ const Index = () => {
         <p className="text-gray-600">Calculate printing costs for your documents with ease</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Upload Documents</CardTitle>
-            <CardDescription>
-              Upload PDF or DOCX files to calculate printing costs
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FileUploader onFilesSelected={handleFilesSelected} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Settings</CardTitle>
-            <CardDescription>
-              Set your pricing and preferences
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <PriceInput defaultPrice={pricePerPage} onChange={handlePriceChange} />
-            
-            {documents.length > 0 && (
-              <Button 
-                variant="outline" 
-                className="w-full text-destructive hover:text-destructive"
-                onClick={handleClearAll}
-              >
-                <Trash className="h-4 w-4 mr-2" />
-                Clear All Documents
-              </Button>
-            )}
-            
-            {documents.length > 0 && user && (
-              <Button 
-                variant="default" 
-                className="w-full"
-                onClick={saveCalculation}
-              >
-                Save Calculation
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+      <div className="mb-8">
+        <div className="flex space-x-4 border-b">
+          <button
+            className={`pb-2 px-4 ${
+              activeTab === 'upload'
+                ? 'border-b-2 border-primary font-medium'
+                : 'text-muted-foreground'
+            }`}
+            onClick={() => setActiveTab('upload')}
+          >
+            File Upload
+          </button>
+          <button
+            className={`pb-2 px-4 ${
+              activeTab === 'manual'
+                ? 'border-b-2 border-primary font-medium'
+                : 'text-muted-foreground'
+            }`}
+            onClick={() => setActiveTab('manual')}
+          >
+            Manual Input
+          </button>
+        </div>
       </div>
 
-      {isProcessing && (
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-600 mr-3"></div>
-              <p>Processing documents, please wait...</p>
+      {activeTab === 'upload' ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Upload Documents</CardTitle>
+                <CardDescription>
+                  Upload PDF or DOCX files to calculate printing costs
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FileUploader onFilesSelected={handleFilesSelected} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Settings</CardTitle>
+                <CardDescription>
+                  Set your pricing and preferences
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <PriceInput defaultPrice={pricePerPage} onChange={handlePriceChange} />
+                
+                {documents.length > 0 && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full text-destructive hover:text-destructive"
+                    onClick={handleClearAll}
+                  >
+                    <Trash className="h-4 w-4 mr-2" />
+                    Clear All Documents
+                  </Button>
+                )}
+                
+                {documents.length > 0 && user && (
+                  <Button 
+                    variant="default" 
+                    className="w-full"
+                    onClick={saveCalculation}
+                  >
+                    Save Calculation
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {isProcessing && (
+            <Card className="mb-6">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-600 mr-3"></div>
+                  <p>Processing documents, please wait...</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2">
+              <DocumentList 
+                documents={documents} 
+                pricePerPage={pricePerPage}
+                onUpdatePageCount={updatePageCount} 
+              />
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div>
+              <Summary summary={summary} pricePerPage={pricePerPage} />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2">
-          <DocumentList 
-            documents={documents} 
-            pricePerPage={pricePerPage}
-            onUpdatePageCount={updatePageCount} 
-          />
-        </div>
-        <div>
-          <Summary summary={summary} pricePerPage={pricePerPage} />
-        </div>
-      </div>
+          {summary.totalDocuments > 0 && (
+            <div className="mt-8">
+              <CostSplitter summary={summary} batchId={batchId} />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Manual Document Entry</CardTitle>
+                <CardDescription>
+                  Enter document details manually to calculate printing costs
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ManualPageInput
+                  documents={documents}
+                  onDocumentsChange={setDocuments}
+                  pricePerPage={pricePerPage}
+                />
+              </CardContent>
+            </Card>
 
-      {summary.totalDocuments > 0 && (
-        <div className="mt-8">
-          <CostSplitter summary={summary} batchId={batchId} />
-        </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Settings</CardTitle>
+                <CardDescription>
+                  Set your pricing and preferences
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <PriceInput defaultPrice={pricePerPage} onChange={handlePriceChange} />
+                
+                {documents.length > 0 && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full text-destructive hover:text-destructive"
+                    onClick={handleClearAll}
+                  >
+                    <Trash className="h-4 w-4 mr-2" />
+                    Clear All Documents
+                  </Button>
+                )}
+                
+                {documents.length > 0 && user && (
+                  <Button 
+                    variant="default" 
+                    className="w-full"
+                    onClick={saveCalculation}
+                  >
+                    Save Calculation
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2">
+              <DocumentList 
+                documents={documents} 
+                pricePerPage={pricePerPage}
+                onUpdatePageCount={updatePageCount} 
+              />
+            </div>
+            <div>
+              <Summary summary={summary} pricePerPage={pricePerPage} />
+            </div>
+          </div>
+
+          {summary.totalDocuments > 0 && (
+            <div className="mt-8">
+              <CostSplitter summary={summary} batchId={batchId} />
+            </div>
+          )}
+        </>
       )}
 
       <footer className="mt-12 text-center text-sm text-gray-500">
