@@ -6,6 +6,7 @@ import PriceInput from "@/components/PriceInput";
 import DocumentList from "@/components/DocumentList";
 import Summary from "@/components/Summary";
 import CostSplitter from "@/components/CostSplitter";
+import RefreshButton from "@/components/ui/refresh-button";
 import { DocumentFile, DocumentSummary, countPages, generateId } from "@/utils/fileUtils";
 import { Trash } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
@@ -32,12 +33,36 @@ const Index = () => {
     totalCost: 0
   });
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [batchId, setBatchId] = useState<string>(getNewBatchId());
   const { user } = useAuth();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const batchParam = searchParams.get('batch');
   const [activeTab, setActiveTab] = useState<'upload' | 'manual'>('upload');
+
+  // Load saved data from localStorage on initial load
+  useEffect(() => {
+    const savedData = localStorage.getItem('calculatorData');
+    if (savedData) {
+      try {
+        const { documents: savedDocs, pricePerPage: savedPrice } = JSON.parse(savedData);
+        setDocuments(savedDocs);
+        setPricePerPage(savedPrice);
+      } catch (error) {
+        console.error('Error loading saved data:', error);
+      }
+    }
+  }, []);
+
+  // Save data to localStorage whenever it changes
+  useEffect(() => {
+    const dataToSave = {
+      documents,
+      pricePerPage
+    };
+    localStorage.setItem('calculatorData', JSON.stringify(dataToSave));
+  }, [documents, pricePerPage]);
 
   useEffect(() => {
     if (batchParam && user) {
@@ -286,127 +311,172 @@ const Index = () => {
     });
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (batchParam && user) {
+        await loadSavedCalculation(batchParam);
+        toast({
+          title: "Data refreshed",
+          description: "Your calculation has been refreshed from the server.",
+        });
+      } else {
+        // Reload from localStorage
+        const savedData = localStorage.getItem('calculatorData');
+        if (savedData) {
+          const { documents: savedDocs, pricePerPage: savedPrice } = JSON.parse(savedData);
+          setDocuments(savedDocs);
+          setPricePerPage(savedPrice);
+          toast({
+            title: "Data refreshed",
+            description: "Your calculation has been refreshed from local storage.",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
-    <div className="container mx-auto py-8 max-w-6xl">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-brand-700 mb-2">Page Cost Calculator Pro</h1>
-        <p className="text-gray-600">Calculate printing costs for your documents with ease</p>
+    <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8 max-w-6xl">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-brand-700 mb-2">Page Cost Calculator Pro</h1>
+        <p className="text-sm sm:text-base text-gray-600">Calculate printing costs for your documents with ease</p>
       </div>
 
-      <div className="mb-8">
-        <div className="flex space-x-4 border-b">
-          <button
-            className={`pb-2 px-4 ${
-              activeTab === 'upload'
-                ? 'border-b-2 border-primary font-medium'
-                : 'text-muted-foreground'
-            }`}
-            onClick={() => setActiveTab('upload')}
-          >
-            File Upload
-          </button>
-          <button
-            className={`pb-2 px-4 ${
-              activeTab === 'manual'
-                ? 'border-b-2 border-primary font-medium'
-                : 'text-muted-foreground'
-            }`}
-            onClick={() => setActiveTab('manual')}
-          >
-            Manual Input
-          </button>
+      <div className="mb-6 sm:mb-8">
+        <div className="flex justify-between items-center">
+          <div className="flex space-x-2 sm:space-x-4 border-b overflow-x-auto">
+            <button
+              className={`pb-2 px-2 sm:px-4 whitespace-nowrap ${
+                activeTab === 'upload'
+                  ? 'border-b-2 border-primary font-medium'
+                  : 'text-muted-foreground'
+              }`}
+              onClick={() => setActiveTab('upload')}
+            >
+              File Upload
+            </button>
+            <button
+              className={`pb-2 px-2 sm:px-4 whitespace-nowrap ${
+                activeTab === 'manual'
+                  ? 'border-b-2 border-primary font-medium'
+                  : 'text-muted-foreground'
+              }`}
+              onClick={() => setActiveTab('manual')}
+            >
+              Manual Input
+            </button>
+          </div>
+          <RefreshButton onClick={handleRefresh} isLoading={isRefreshing} />
         </div>
       </div>
 
       {activeTab === 'upload' ? (
-        <>
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload Documents</CardTitle>
-                <CardDescription>
-                  Upload PDF or DOCX files to calculate printing costs
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1">
-                    <PriceInput
-                      defaultPrice={pricePerPage}
-                      onChange={handlePriceChange}
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={handleClearAll}
-                    className="whitespace-nowrap"
-                  >
-                    <Trash className="w-4 h-4 mr-2" />
-                    Clear All
-                  </Button>
+        <div className="space-y-4 sm:space-y-6">
+          <Card>
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle className="text-lg sm:text-xl">Upload Documents</CardTitle>
+                  <CardDescription className="text-sm sm:text-base">
+                    Upload PDF or DOCX files to calculate printing costs
+                  </CardDescription>
                 </div>
-                
-                <div className="border rounded-lg p-4">
-                  <FileUploader
-                    onFilesSelected={handleFilesSelected}
+                <RefreshButton onClick={handleRefresh} isLoading={isRefreshing} />
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <div className="flex-1">
+                  <PriceInput
+                    defaultPrice={pricePerPage}
+                    onChange={handlePriceChange}
                   />
+                </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleClearAll}
+                  className="whitespace-nowrap w-full sm:w-auto"
+                >
+                  <Trash className="w-4 h-4 mr-2" />
+                  Clear All
+                  </Button>
+          </div>
+
+              <div className="border rounded-lg p-3 sm:p-4">
+                <FileUploader
+                  onFilesSelected={handleFilesSelected}
+                />
                 </div>
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <Card>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-lg sm:text-xl">Documents</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6">
+              <DocumentList 
+                documents={documents} 
+                pricePerPage={pricePerPage}
+                onUpdatePageCount={updatePageCount} 
+              />
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4 sm:space-y-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>Documents</CardTitle>
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-lg sm:text-xl">Summary</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <DocumentList
-                    documents={documents}
+                <CardContent className="p-4 sm:p-6">
+                  <Summary
+                    summary={summary}
                     pricePerPage={pricePerPage}
-                    onUpdatePageCount={updatePageCount}
                   />
                 </CardContent>
               </Card>
 
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Summary</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Summary
-                      summary={summary}
-                      pricePerPage={pricePerPage}
-                    />
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Cost Splitter</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CostSplitter
-                      summary={summary}
-                      batchId={batchId}
-                    />
-                  </CardContent>
-                </Card>
-              </div>
+              <Card>
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-lg sm:text-xl">Cost Splitter</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6">
+                  <CostSplitter
+                    summary={summary}
+                    batchId={batchId}
+                  />
+                </CardContent>
+              </Card>
             </div>
           </div>
-        </>
+            </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Manual Document Entry</CardTitle>
-                <CardDescription>
-                  Enter document details manually to calculate printing costs
-                </CardDescription>
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-lg sm:text-xl">Manual Document Entry</CardTitle>
+                    <CardDescription className="text-sm sm:text-base">
+                      Enter document details manually to calculate printing costs
+                    </CardDescription>
+                  </div>
+                  <RefreshButton onClick={handleRefresh} isLoading={isRefreshing} />
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 sm:p-6">
                 <ManualPageInput
                   documents={documents}
                   onDocumentsChange={setDocuments}
@@ -416,13 +486,13 @@ const Index = () => {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Settings</CardTitle>
-                <CardDescription>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-lg sm:text-xl">Settings</CardTitle>
+                <CardDescription className="text-sm sm:text-base">
                   Set your pricing and preferences
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 <PriceInput defaultPrice={pricePerPage} onChange={handlePriceChange} />
                 
                 {documents.length > 0 && (
@@ -449,7 +519,7 @@ const Index = () => {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             <div className="md:col-span-2">
               <DocumentList 
                 documents={documents} 
@@ -463,18 +533,18 @@ const Index = () => {
           </div>
 
           {summary.totalDocuments > 0 && (
-            <div className="mt-8">
+            <div className="mt-6 sm:mt-8">
               <CostSplitter summary={summary} batchId={batchId} />
             </div>
           )}
-        </>
+        </div>
       )}
 
-      <footer className="mt-12 text-center text-sm text-gray-500">
+      <footer className="mt-8 sm:mt-12 text-center text-xs sm:text-sm text-gray-500">
         <p>
           Page Cost Calculator Pro - A document cost calculation tool
         </p>
-        <p>
+        <p className="mt-1">
           Note: This is a frontend demonstration. In a production environment, 
           document processing would be handled server-side for better accuracy and security.
         </p>
