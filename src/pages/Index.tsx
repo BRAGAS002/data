@@ -320,82 +320,81 @@ const Index = () => {
 
       {activeTab === 'upload' ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card className="md:col-span-2">
+          <div className="space-y-6">
+            <Card>
               <CardHeader>
                 <CardTitle>Upload Documents</CardTitle>
                 <CardDescription>
                   Upload PDF or DOCX files to calculate printing costs
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <FileUploader onFilesSelected={handleFilesSelected} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Settings</CardTitle>
-                <CardDescription>
-                  Set your pricing and preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <PriceInput defaultPrice={pricePerPage} onChange={handlePriceChange} />
-                
-                {documents.length > 0 && (
-                  <Button 
-                    variant="outline" 
-                    className="w-full text-destructive hover:text-destructive"
+              <CardContent className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <PriceInput
+                      defaultPrice={pricePerPage}
+                      onChange={handlePriceChange}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
                     onClick={handleClearAll}
+                    className="whitespace-nowrap"
                   >
-                    <Trash className="h-4 w-4 mr-2" />
-                    Clear All Documents
+                    <Trash className="w-4 h-4 mr-2" />
+                    Clear All
                   </Button>
-                )}
+                </div>
                 
-                {documents.length > 0 && user && (
-                  <Button 
-                    variant="default" 
-                    className="w-full"
-                    onClick={saveCalculation}
-                  >
-                    Save Calculation
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {isProcessing && (
-            <Card className="mb-6">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-600 mr-3"></div>
-                  <p>Processing documents, please wait...</p>
+                <div className="border rounded-lg p-4">
+                  <FileUploader
+                    onFilesSelected={handleFilesSelected}
+                  />
                 </div>
               </CardContent>
             </Card>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2">
-              <DocumentList 
-                documents={documents} 
-                pricePerPage={pricePerPage}
-                onUpdatePageCount={updatePageCount} 
-              />
-            </div>
-            <div>
-              <Summary summary={summary} pricePerPage={pricePerPage} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Documents</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DocumentList
+                    documents={documents}
+                    pricePerPage={pricePerPage}
+                    onUpdatePageCount={updatePageCount}
+                  />
+                </CardContent>
+              </Card>
+
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Summary
+                      summary={summary}
+                      pricePerPage={pricePerPage}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Cost Splitter</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CostSplitter
+                      summary={summary}
+                      batchId={batchId}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
-
-          {summary.totalDocuments > 0 && (
-            <div className="mt-8">
-              <CostSplitter summary={summary} batchId={batchId} />
-            </div>
-          )}
         </>
       ) : (
         <>
